@@ -235,7 +235,8 @@ class SidePanel(ctk.CTkTabview):
         
         self.slides_frame = ctk.CTkScrollableFrame(self.tab("Slides"))
         self.slides_frame.pack(expand=True, fill="both")
-        self.slide_buttons: List[ctk.CTkButton] = []
+        self.slide_buttons: List[ctk.CTkButton] = [] # Consider renaming to slide_widgets if they are not all buttons
+        # self.slide_thumbnails: List[ctk.CTkLabel] = [] # Alternative if using labels for images
 
         ctk.CTkLabel(self.tab("Files"), text="Files content").pack(padx=20, pady=20)
 
@@ -288,21 +289,88 @@ class SidePanel(ctk.CTkTabview):
         self.theme_option_menu.configure(values=themes)
         self.theme_option_menu.set(selected_theme)
 
-    def update_slide_list(self, slides: List['SlideData'], current_slide_index: int):
-        for button in self.slide_buttons:
-            button.destroy()
+    def update_slide_list(self, slides: List['SlideData'], current_slide_index: int, slide_images: List[bytes]):
+        for widget in self.slide_buttons:
+            widget.destroy()
         self.slide_buttons.clear()
 
-        for slide in slides:
-            button = ctk.CTkButton(
-                self.slides_frame,
-                text=f"Slide {slide.index}: {slide.content[:30].strip()}...",
-                command=lambda idx=slide.index: self.controller.navigate_to_slide(idx)
-            )
-            if slide.index == current_slide_index:
-                button.configure(fg_color=("#3a7ebf", "#1f538d"))
-            button.pack(fill="x", pady=2, padx=5)
-            self.slide_buttons.append(button)
+        # Fallback to text if no images are provided or if there's a mismatch
+        if not slide_images or len(slide_images) != len(slides):
+            for slide in slides:
+                button_text = f"Slide {slide.index}"
+                # Try to get a title or the first line of content
+                title_or_content = ""
+                if slide.title:
+                    title_or_content = slide.title[:20]
+                elif slide.content:
+                    first_line = slide.content.strip().splitlines()[0] if slide.content.strip() else ""
+                    title_or_content = first_line[:20]
+                if title_or_content:
+                     button_text += f": {title_or_content}..."
+                else:
+                    button_text += "..."
+
+
+                button = ctk.CTkButton(
+                    self.slides_frame,
+                    text=button_text,
+                    command=lambda idx=slide.index: self.controller.navigate_to_slide(idx)
+                )
+                if slide.index == current_slide_index:
+                    button.configure(fg_color=("#3a7ebf", "#1f538d"))
+                button.pack(fill="x", pady=2, padx=5)
+                self.slide_buttons.append(button)
+            return
+
+        thumbnail_width = 128  # Thumbnail width
+
+        for i, slide in enumerate(slides):
+            if i < len(slide_images) and slide_images[i]:
+                try:
+                    img_data = slide_images[i]
+                    pil_image = Image.open(io.BytesIO(img_data))
+
+                    aspect_ratio = pil_image.height / pil_image.width
+                    thumbnail_height = int(thumbnail_width * aspect_ratio)
+
+                    ctk_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(thumbnail_width, thumbnail_height))
+
+                    image_widget = ctk.CTkButton(
+                        self.slides_frame,
+                        image=ctk_image,
+                        text="",
+                        command=lambda idx=slide.index: self.controller.navigate_to_slide(idx),
+                        fg_color="transparent"
+                    )
+
+                    if slide.index == current_slide_index:
+                        image_widget.configure(fg_color=("#90CAF9", "#1E88E5")) # Example selected color (light blueish)
+
+                    image_widget.pack(padx=5, pady=5)
+                    self.slide_buttons.append(image_widget)
+
+                except Exception as e:
+                    print(f"Error displaying slide thumbnail {slide.index}: {e}")
+                    error_button = ctk.CTkButton(
+                        self.slides_frame,
+                        text=f"Slide {slide.index} (Error)",
+                        command=lambda idx=slide.index: self.controller.navigate_to_slide(idx)
+                    )
+                    if slide.index == current_slide_index:
+                        error_button.configure(fg_color=("#3a7ebf", "#1f538d"))
+                    error_button.pack(fill="x", pady=2, padx=5)
+                    self.slide_buttons.append(error_button)
+            else:
+                # Fallback for missing image for a specific slide
+                fallback_button = ctk.CTkButton(
+                    self.slides_frame,
+                    text=f"Slide {slide.index} (No image data)",
+                    command=lambda idx=slide.index: self.controller.navigate_to_slide(idx)
+                )
+                if slide.index == current_slide_index:
+                    fallback_button.configure(fg_color=("#3a7ebf", "#1f538d"))
+                fallback_button.pack(fill="x", pady=2, padx=5)
+                self.slide_buttons.append(fallback_button)
 
 class MainAppView(ctk.CTk):
     def __init__(self, controller: 'AppController'):
