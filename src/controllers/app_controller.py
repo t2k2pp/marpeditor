@@ -142,7 +142,7 @@ class AppController:
         """エディタ内容変更時の処理"""
         self.state.markdown_content = new_content
         self.state.is_document_modified = True
-        
+
         # Update slide data and count
         self.state.slides_data = self.marp_engine.extract_slides(self.state.markdown_content)
         self.state.slide_count = len(self.state.slides_data)
@@ -151,8 +151,14 @@ class AppController:
             self.state.current_slide_index = self.state.slide_count
         elif self.state.slide_count == 0:
             self.state.current_slide_index = 0
+
+        # Debounce preview update
+        if self.preview_update_timer:
+            self.preview_update_timer.cancel()
         
-        self.update_preview() # Trigger preview update immediately for now
+        self.preview_update_timer = Timer(0.2, self.update_preview) # 200ms delay
+        self.preview_update_timer.start()
+
         if self.view:
             self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index)
             self.view.update_status(self.state.status_message, len(new_content), new_content.count('\n') + 1)
