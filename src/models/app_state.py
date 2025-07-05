@@ -42,6 +42,8 @@ class AppState:
     is_live_preview_enabled: bool = True
     editor_font_size: int = 12
     preview_zoom_level: float = 1.0
+    debounce_delay: float = 1.0  # Default debounce delay in seconds
+    available_debounce_delays: List[float] = field(default_factory=lambda: [1.0, 3.0, 5.0])
     aspect_ratio: str = "16:9" # Add aspect_ratio
     window_layout: Dict[str, Any] = field(default_factory=dict)
     

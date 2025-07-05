@@ -245,10 +245,44 @@ class SidePanel(ctk.CTkTabview):
             command=self._on_theme_selected
         )
         self.theme_option_menu.set(self.controller.state.selected_theme)
-        self.theme_option_menu.pack(padx=20, pady=20)
+        self.theme_option_menu.pack(padx=20, pady=10, fill="x")
+
+        # Settings Tab
+        self.add("Settings")
+        settings_tab = self.tab("Settings")
+
+        # Live Preview Switch
+        self.live_preview_switch_var = ctk.StringVar(value="on" if self.controller.state.is_live_preview_enabled else "off")
+        self.live_preview_switch = ctk.CTkSwitch(settings_tab, text="Live Preview",
+                                                 variable=self.live_preview_switch_var, onvalue="on", offvalue="off",
+                                                 command=self._on_live_preview_toggled)
+        self.live_preview_switch.pack(padx=20, pady=10, anchor="w")
+
+        # Debounce Delay OptionMenu
+        ctk.CTkLabel(settings_tab, text="Preview Debounce Time (seconds):").pack(padx=20, pady=(10,0), anchor="w")
+        self.debounce_option_menu = ctk.CTkOptionMenu(
+            settings_tab,
+            values=[str(d) for d in self.controller.state.available_debounce_delays],
+            command=self._on_debounce_delay_selected
+        )
+        self.debounce_option_menu.set(str(self.controller.state.debounce_delay))
+        self.debounce_option_menu.pack(padx=20, pady=(0,10), fill="x")
+
 
     def _on_theme_selected(self, theme_name: str):
         self.controller.apply_theme(theme_name)
+
+    def _on_live_preview_toggled(self):
+        is_enabled = self.live_preview_switch_var.get() == "on"
+        self.controller.toggle_live_preview(enabled=is_enabled)
+
+    def _on_debounce_delay_selected(self, delay_str: str):
+        self.controller.set_debounce_delay(float(delay_str))
+
+    def update_settings_ui(self):
+        """Updates the settings UI elements based on AppState."""
+        self.live_preview_switch_var.set("on" if self.controller.state.is_live_preview_enabled else "off")
+        self.debounce_option_menu.set(str(self.controller.state.debounce_delay))
 
     def update_theme_selection(self, themes: list, selected_theme: str):
         self.theme_option_menu.configure(values=themes)
@@ -314,6 +348,9 @@ class MainAppView(ctk.CTk):
         self.aspect_ratio_button.set("16:9")
         self.aspect_ratio_button.pack(side="left", padx=10, pady=5)
 
+        self.refresh_preview_button = ctk.CTkButton(self.tool_bar_frame, text="Refresh Preview", width=120, command=self._on_refresh_preview)
+        self.refresh_preview_button.pack(side="left", padx=10, pady=5)
+
         # Main Content Area
         self.main_content_frame = ctk.CTkFrame(self, corner_radius=0)
         self.main_content_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
@@ -365,6 +402,9 @@ class MainAppView(ctk.CTk):
 
     def _on_aspect_ratio_change(self, aspect_ratio: str):
         self.controller.set_aspect_ratio(aspect_ratio)
+
+    def _on_refresh_preview(self):
+        self.controller._schedule_preview_update(force=True)
 
     def _show_file_menu(self):
         menu = tkinter.Menu(self, tearoff=0)

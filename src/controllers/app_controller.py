@@ -153,11 +153,14 @@ class AppController:
             self.state.current_slide_index = 0
 
         # Debounce preview update
-        if self.preview_update_timer:
+        if self.state.is_live_preview_enabled:
+            if self.preview_update_timer:
+                self.preview_update_timer.cancel()
+
+            self.preview_update_timer = Timer(self.state.debounce_delay, self._schedule_preview_update)
+            self.preview_update_timer.start()
+        elif self.preview_update_timer: # If live preview is off, cancel any existing timer
             self.preview_update_timer.cancel()
-        
-        self.preview_update_timer = Timer(0.2, self._schedule_preview_update) # 200ms delay
-        self.preview_update_timer.start()
 
         if self.view:
             self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index)
@@ -166,8 +169,20 @@ class AppController:
     def toggle_live_preview(self, enabled: bool) -> None:
         """ライブプレビューの有効/無効切り替え"""
         self.state.is_live_preview_enabled = enabled
-        self._schedule_preview_update(force=True) # Update preview when toggling live preview
+        if self.view: # Update settings UI
+            self.view.after(0, lambda: self.view.side_panel.update_settings_ui())
+
+        if not enabled and self.preview_update_timer: # If live preview is disabled, cancel any pending timer
+            self.preview_update_timer.cancel()
+        elif enabled:
+            self._schedule_preview_update(force=True) # If enabled, force update preview
         
+    def set_debounce_delay(self, delay: float) -> None:
+        """Sets the debounce delay for preview updates."""
+        self.state.debounce_delay = delay
+        if self.view: # Update settings UI
+            self.view.after(0, lambda: self.view.side_panel.update_settings_ui())
+
     def _schedule_preview_update(self, force: bool = False) -> None:
         """Schedules the preview update to run on the main Tkinter thread."""
         if self.view:
@@ -176,6 +191,15 @@ class AppController:
 
     def update_preview(self, force: bool = False) -> None:
         """プレビューの更新 (UI操作はメインスレッドで行われる想定)"""
+        if not self.state.is_live_preview_enabled and not force: # If live preview is off and not a forced update, do nothing
+            if self.view: # Still ensure to clear preview if it was forced off
+                 if self.state.is_presentation_mode:
+                    if hasattr(self.view, 'presentation_html_frame') and self.view.presentation_html_frame:
+                        self.view.presentation_html_frame.load_html("Live preview is disabled.")
+                 else:
+                    self.view.update_previews_panel([], self.state.aspect_ratio)
+            return
+
         if self.state.is_live_preview_enabled or force:
             if self.state.is_presentation_mode:
                 rendered_html = self.marp_engine.render_presentation(
