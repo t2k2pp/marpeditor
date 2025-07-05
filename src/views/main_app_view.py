@@ -222,6 +222,37 @@ class PreviewPanel(ctk.CTkScrollableFrame):
                 error_label = ctk.CTkLabel(self, text=f"Error: {e}")
                 error_label.pack(padx=10, pady=10)
 
+# PreviewPanel class is no longer needed as its functionality is removed or replaced.
+# class PreviewPanel(ctk.CTkScrollableFrame):
+#     def __init__(self, parent, controller: 'AppController'):
+#         super().__init__(parent)
+#         self.controller = controller
+#         self.previews: List[ctk.CTkLabel] = []
+#
+#     def update_previews(self, image_data: List[bytes], aspect_ratio: str):
+#         for widget in self.winfo_children():
+#             widget.destroy()
+#         self.previews.clear()
+#
+#         if not image_data:
+#             ctk.CTkLabel(self, text="Preview not available.").pack(pady=20)
+#             return
+#
+#         base_width = 800
+#         width, height = (base_width, int(base_width * 3/4)) if aspect_ratio == "4:3" else (base_width, int(base_width * 9/16))
+#
+#         for data in image_data:
+#             try:
+#                 pil_image = Image.open(io.BytesIO(data))
+#                 ctk_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(width, height))
+#                 label = ctk.CTkLabel(self, image=ctk_image, text="")
+#                 label.pack(padx=10, pady=10)
+#                 self.previews.append(label)
+#             except Exception as e:
+#                 print(f"Error displaying image: {e}")
+#                 error_label = ctk.CTkLabel(self, text=f"Error: {e}")
+#                 error_label.pack(padx=10, pady=10)
+
 class SidePanel(ctk.CTkTabview):
     def __init__(self, parent, controller: 'AppController'):
         super().__init__(master=parent)
@@ -396,6 +427,8 @@ class MainAppView(ctk.CTk):
         self.controller.view = self
         self.presentation_window: Optional[ctk.CTkToplevel] = None
         self.presentation_html_frame: Optional[tkinterweb.HtmlFrame] = None
+        self.popup_window: Optional[ctk.CTkToplevel] = None
+        self.popup_html_frame: Optional[tkinterweb.HtmlFrame] = None
         self.setup_window()
         self.create_widgets()
 
@@ -436,23 +469,25 @@ class MainAppView(ctk.CTk):
         self.refresh_preview_button = ctk.CTkButton(self.tool_bar_frame, text="Refresh Preview", width=120, command=self._on_refresh_preview)
         self.refresh_preview_button.pack(side="left", padx=10, pady=5)
 
+        self.popup_window_button = ctk.CTkButton(self.tool_bar_frame, text="PopUp Window", width=120, command=self._on_popup_window_button_pressed)
+        self.popup_window_button.pack(side="left", padx=10, pady=5)
+
         # Main Content Area
         self.main_content_frame = ctk.CTkFrame(self, corner_radius=0)
         self.main_content_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
         self.main_content_frame.grid_columnconfigure(1, weight=1)
-        self.main_content_frame.grid_rowconfigure(0, weight=1)
-        self.main_content_frame.grid_rowconfigure(1, weight=1)
+        self.main_content_frame.grid_rowconfigure(0, weight=1) # Only one row needed for editor now
 
         # SidePanel
         self.side_panel = SidePanel(self.main_content_frame, self.controller)
-        self.side_panel.grid(row=0, column=0, rowspan=2, sticky="nsw", padx=5, pady=5)
+        self.side_panel.grid(row=0, column=0, sticky="nsw", padx=5, pady=5) # Spans the single row
 
-        # Editor and Preview Panels
+        # Editor Panel
         self.editor_panel = EditorPanel(self.main_content_frame, self.controller)
         self.editor_panel.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
-        self.preview_panel = PreviewPanel(self.main_content_frame, self.controller)
-        self.preview_panel.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
+        # self.preview_panel = PreviewPanel(self.main_content_frame, self.controller) # Preview panel removed
+        # self.preview_panel.grid(row=1, column=1, sticky="nsew", padx=5, pady=5) # Preview panel removed
 
         # StatusBar
         self.status_bar_frame = ctk.CTkFrame(self, height=20, corner_radius=0)
@@ -472,8 +507,8 @@ class MainAppView(ctk.CTk):
         self.char_count_label.configure(text=f"Chars: {char_count}")
         self.line_count_label.configure(text=f"Lines: {line_count}")
 
-    def update_previews_panel(self, image_data: List[bytes], aspect_ratio: str):
-        self.preview_panel.update_previews(image_data, aspect_ratio)
+    # def update_previews_panel(self, image_data: List[bytes], aspect_ratio: str): # Method removed
+    #     self.preview_panel.update_previews(image_data, aspect_ratio) # Preview panel removed
 
     def update_presentation_view(self, html_content: str):
         if self.presentation_html_frame:
@@ -543,3 +578,34 @@ class MainAppView(ctk.CTk):
         self.presentation_html_frame = None
         self.controller.state.is_presentation_mode = False
         self.controller.update_preview(force=True)
+
+    def _on_popup_window_button_pressed(self):
+        self.controller.toggle_popup_window()
+
+    def open_popup_window(self, html_content: str):
+        if self.popup_window is None or not self.popup_window.winfo_exists():
+            self.popup_window = ctk.CTkToplevel(self)
+            self.popup_window.title("Slide Preview")
+            self.popup_window.geometry("800x600") # Adjust size as needed
+            self.popup_window.protocol("WM_DELETE_WINDOW", self._on_popup_window_closed)
+
+            self.popup_html_frame = tkinterweb.HtmlFrame(self.popup_window, messages_enabled=False)
+            self.popup_html_frame.pack(expand=True, fill="both")
+            self.popup_html_frame.load_html(html_content)
+            self.controller.state.is_popup_window_open = True
+        else:
+            self.popup_window.focus() # Bring to front if already open
+
+    def close_popup_window(self):
+        if self.popup_window and self.popup_window.winfo_exists():
+            self.popup_window.destroy()
+        self.popup_window = None
+        self.popup_html_frame = None
+        self.controller.state.is_popup_window_open = False
+
+    def _on_popup_window_closed(self):
+        self.close_popup_window() # Ensure controller state is updated
+
+    def update_popup_window_content(self, html_content: str):
+        if self.popup_html_frame and self.popup_window and self.popup_window.winfo_exists():
+            self.popup_html_frame.load_html(html_content)

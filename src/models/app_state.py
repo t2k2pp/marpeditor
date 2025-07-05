@@ -33,6 +33,7 @@ class AppState:
     current_slide_index: int = 1
     slides_data: List[SlideData] = field(default_factory=list)
     is_presentation_mode: bool = False # Added this line
+    is_popup_window_open: bool = False
     
     # テーマ・設定関連
     selected_theme: str = "default"
