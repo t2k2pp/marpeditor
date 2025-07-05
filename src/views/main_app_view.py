@@ -294,6 +294,23 @@ class SidePanel(ctk.CTkTabview):
             widget.destroy()
         self.slide_buttons.clear()
 
+        # Determine thumbnail width dynamically
+        frame_width = self.slides_frame.winfo_width()
+        horizontal_padding = 20  # Total padding (left + right)
+        min_thumbnail_width = 80
+        default_thumbnail_width = 220 # Approx 1.7x of 128
+
+        if frame_width > (horizontal_padding + min_thumbnail_width): # Check if frame is wide enough
+            thumbnail_width = frame_width - horizontal_padding
+            if thumbnail_width < min_thumbnail_width: # Should not happen if previous check is correct, but as a safeguard
+                thumbnail_width = min_thumbnail_width
+        elif frame_width > min_thumbnail_width : # Frame is somewhat rendered but not very wide
+             thumbnail_width = frame_width - horizontal_padding # Allow smaller than default if frame is small
+             if thumbnail_width < min_thumbnail_width:
+                 thumbnail_width = min_thumbnail_width
+        else: # Frame is very small or not rendered (e.g. winfo_width is 1)
+            thumbnail_width = default_thumbnail_width
+
         # Fallback to text if no images are provided or if there's a mismatch
         if not slide_images or len(slide_images) != len(slides):
             for slide in slides:
