@@ -86,9 +86,9 @@ class AppController:
 
             if self.view:
                 self.view.set_editor_content(content)
-                self.update_preview(force=True)
+                self._schedule_preview_update(force=True)
                 self.view.update_status(self.state.status_message, len(content), content.count('\n') + 1)
-                self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index)
+                self.view.after(0, lambda: self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index))
             return True
         else:
             self.state.status_message = f"Failed to open: {file_path.name}"
@@ -156,7 +156,7 @@ class AppController:
         if self.preview_update_timer:
             self.preview_update_timer.cancel()
         
-        self.preview_update_timer = Timer(0.2, self.update_preview) # 200ms delay
+        self.preview_update_timer = Timer(0.2, self._schedule_preview_update) # 200ms delay
         self.preview_update_timer.start()
 
         if self.view:
@@ -166,10 +166,16 @@ class AppController:
     def toggle_live_preview(self, enabled: bool) -> None:
         """ライブプレビューの有効/無効切り替え"""
         self.state.is_live_preview_enabled = enabled
-        self.update_preview() # Update preview when toggling live preview
+        self._schedule_preview_update(force=True) # Update preview when toggling live preview
         
+    def _schedule_preview_update(self, force: bool = False) -> None:
+        """Schedules the preview update to run on the main Tkinter thread."""
+        if self.view:
+            # Pass force as an argument to update_preview
+            self.view.after(0, lambda: self.update_preview(force=force))
+
     def update_preview(self, force: bool = False) -> None:
-        """プレビューの更新"""
+        """プレビューの更新 (UI操作はメインスレッドで行われる想定)"""
         if self.state.is_live_preview_enabled or force:
             if self.state.is_presentation_mode:
                 rendered_html = self.marp_engine.render_presentation(
@@ -177,7 +183,8 @@ class AppController:
                     self.state.selected_theme,
                     slide_index=self.state.current_slide_index - 1 if self.state.current_slide_index > 0 else None
                 )
-                if self.view:
+                if self.view and hasattr(self.view, 'presentation_html_frame') and self.view.presentation_html_frame:
+                    # Already in main thread due to _schedule_preview_update
                     self.view.presentation_html_frame.load_html(rendered_html)
             else:
                 image_data = self.marp_engine.render_slides_as_images(
@@ -186,25 +193,30 @@ class AppController:
                     self.state.aspect_ratio
                 )
                 if self.view:
+                    # Already in main thread due to _schedule_preview_update
                     self.view.update_previews_panel(image_data, self.state.aspect_ratio)
         else:
             self.state.html_content = ""
             if self.view:
                 if self.state.is_presentation_mode:
-                    self.view.presentation_html_frame.load_html("Live preview is disabled.")
+                    if hasattr(self.view, 'presentation_html_frame') and self.view.presentation_html_frame:
+                        # Already in main thread due to _schedule_preview_update
+                        self.view.presentation_html_frame.load_html("Live preview is disabled.")
                 else:
+                    # Already in main thread due to _schedule_preview_update
                     self.view.update_previews_panel([], self.state.aspect_ratio)
-        
+
     def set_aspect_ratio(self, aspect_ratio: str) -> None:
         self.state.aspect_ratio = aspect_ratio
-        self.update_preview(force=True)
+        self._schedule_preview_update(force=True)
         
     def apply_theme(self, theme_name: str) -> None:
         """テーマの適用"""
         self.state.selected_theme = theme_name
-        self.update_preview(force=True) # Force update preview with new theme
+        self._schedule_preview_update(force=True) # Force update preview with new theme
         if self.view:
-            self.view.update_theme_selection(self.state.available_themes, self.state.selected_theme)
+            # This UI update should also be scheduled if it's not already safe
+            self.view.after(0, lambda: self.view.update_theme_selection(self.state.available_themes, self.state.selected_theme))
         
     def insert_slide_break(self, position: int) -> None:
         """スライド区切りの挿入"""
@@ -214,9 +226,9 @@ class AppController:
         """指定スライドへの移動"""
         if 1 <= slide_index <= self.state.slide_count:
             self.state.current_slide_index = slide_index
-            self.update_preview(force=True)
+            self._schedule_preview_update(force=True)
             if self.view:
-                self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index)
+                self.view.after(0, lambda: self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index))
             return True
         return False
     
