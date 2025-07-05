@@ -499,8 +499,8 @@ class MainAppView(ctk.CTk):
     def update_theme_selection(self, themes: list, selected_theme: str):
         self.side_panel.update_theme_selection(themes, selected_theme)
 
-    def update_slide_list(self, slides: List['SlideData'], current_slide_index: int):
-        self.side_panel.update_slide_list(slides, current_slide_index)
+    def update_slide_list(self, slides: List['SlideData'], current_slide_index: int, slide_images: List[bytes]):
+        self.side_panel.update_slide_list(slides, current_slide_index, slide_images)
 
     def toggle_presentation_mode(self):
         if self.presentation_window is None or not self.presentation_window.winfo_exists():
