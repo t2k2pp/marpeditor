@@ -68,6 +68,7 @@ class AppState:
     editor_font_size: int = 12
     preview_zoom_level: float = 1.0
     window_layout: Dict[str, Any] = field(default_factory=dict)
+    is_popup_window_open: bool = False # ポップアップスライドプレビューウィンドウの表示状態
     
     # 最近使用したファイル
     recent_files: List[Path] = field(default_factory=list)
@@ -215,6 +216,9 @@ def apply_theme(self, theme_name: str) -> None:
     
 def insert_slide_break(self, position: int) -> None:
     """スライド区切りの挿入"""
+
+def toggle_popup_window(self) -> None:
+    """スライドプレビューのポップアップウィンドウの表示/非表示を切り替える"""
 ```
 
 #### 3.3.4. プレゼンテーション制御メソッド
@@ -293,11 +297,12 @@ class MainAppView(ctk.CTk):
 **主要コンポーネント**:
 
 1. **MenuBar**: ファイル、編集、表示、ツール、ヘルプメニュー
-2. **ToolBar**: よく使用する機能のクイックアクセス
+2. **ToolBar**: よく使用する機能のクイックアクセス (例: スライドナビゲーション、プレビュー更新、**ポップアップスライド表示ボタン**)
 3. **SidePanel**: 補助情報の表示
 4. **EditorPanel**: Markdownエディタ
 5. **PreviewPanel**: リアルタイムプレビュー
 6. **StatusBar**: ステータス情報の表示
+7. **PopUpWindow (Toplevel)**: 現在選択中のスライドを大きく表示する独立したウィンドウ (詳細は後述)
 
 #### 3.4.3. EditorPanel - 高機能エディタ
 
@@ -384,6 +389,21 @@ class SidePanel(ctk.CTkTabview):
 - **スライド一覧**: スライドのサムネイル表示
 - **ファイルエクスプローラー**: ファイル管理
 - **テーマ選択**: テーマのプレビューと選択
+
+#### 3.4.6. PopUpWindow - スライドプレビュー
+
+独立したトップレベルウィンドウ (`ctk.CTkToplevel`) として実装され、現在 "Slides" パネルで選択されているスライドの拡大プレビューを表示する。
+
+**主要機能**:
+-   ツールバーの専用ボタンにより表示/非表示を切り替え。
+-   `tkinterweb.HtmlFrame` を使用して、選択された単一スライドのHTMLコンテンツを表示。
+-   メインウィンドウの "Slides" パネルでのスライド選択に連動して表示内容を更新。
+-   テーマ変更やコンテンツ編集によるプレビュー更新時にも、表示内容が同期される。
+-   ウィンドウサイズは固定またはリサイズ可能とし、ユーザビリティを考慮する。
+
+**責務**:
+-   `MainAppView` がウィンドウの生成、表示、非表示、内容更新のインターフェースを提供する。
+-   `AppController` が表示状態の管理と、表示すべきHTMLコンテンツの取得・指示を行う。
 
 ## 4. 主要機能の実装方針
 
