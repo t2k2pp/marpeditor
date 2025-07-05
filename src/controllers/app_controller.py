@@ -7,15 +7,17 @@ import tkinter.filedialog as filedialog
 from src.models.app_state import AppState
 from src.services.marp_engine import MarpEngine
 from src.services.file_manager import FileManager
+from typing import List # Add List
 
 # Placeholder for MainAppView, SettingsManager, ExportOptions
 class MainAppView: 
     def update_status(self, message: str, char_count: int = 0, line_count: int = 0): pass
     def set_editor_content(self, content: str): pass
     def get_editor_content(self) -> str: pass
-    def update_preview_panel(self, html_content: str): pass
+    # def update_preview_panel(self, html_content: str): pass # This seems to be outdated, PreviewPanel uses update_previews
+    def update_previews_panel(self, image_data: List[bytes], aspect_ratio: str): pass # Corrected based on MainAppView actual method
     def update_theme_selection(self, themes: list, selected_theme: str): pass
-    def update_slide_list(self, slides: list, current_slide_index: int): pass
+    def update_slide_list(self, slides: list, current_slide_index: int, slide_images: List[bytes]): pass # Added slide_images
     def enter_presentation_mode(self): pass
     def exit_presentation_mode(self): pass
 
@@ -34,6 +36,7 @@ class AppController:
         self.settings_manager = SettingsManager()
         self.auto_save_timer: Optional[Timer] = None
         self.preview_update_timer: Optional[Timer] = None
+        self.last_rendered_slide_images: List[bytes] = []
         
         # Initialize available themes from MarpEngine
         self.state.available_themes = self.marp_engine.get_available_themes()
@@ -52,11 +55,12 @@ class AppController:
         self.state.slide_count = 0
         self.state.current_slide_index = 1
         self.state.slides_data = []
+        self.last_rendered_slide_images = []
         if self.view:
             self.view.set_editor_content("")
-            self.view.update_preview_panel("")
+            self.view.update_previews_panel([], self.state.aspect_ratio)
             self.view.update_status(self.state.status_message, 0, 0)
-            self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index)
+            self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index, self.last_rendered_slide_images)
         return True
     
     def open_document(self, file_path: Optional[Path] = None) -> bool:
@@ -82,13 +86,14 @@ class AppController:
             
             self.state.slides_data = self.marp_engine.extract_slides(self.state.markdown_content)
             self.state.slide_count = len(self.state.slides_data)
-            self.state.current_slide_index = 1 # Reset to first slide on open
+            self.state.current_slide_index = 1
+            self.last_rendered_slide_images = []
 
             if self.view:
                 self.view.set_editor_content(content)
                 self._schedule_preview_update(force=True)
                 self.view.update_status(self.state.status_message, len(content), content.count('\n') + 1)
-                self.view.after(0, lambda: self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index))
+                # self.view.after(0, lambda: self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index)) # This call will be made within update_preview
             return True
         else:
             self.state.status_message = f"Failed to open: {file_path.name}"
@@ -143,27 +148,26 @@ class AppController:
         self.state.markdown_content = new_content
         self.state.is_document_modified = True
 
-        # Update slide data and count
-        self.state.slides_data = self.marp_engine.extract_slides(self.state.markdown_content)
-        self.state.slide_count = len(self.state.slides_data)
-        # Ensure current slide index is valid
-        if self.state.slide_count > 0 and self.state.current_slide_index > self.state.slide_count:
-            self.state.current_slide_index = self.state.slide_count
-        elif self.state.slide_count == 0:
-            self.state.current_slide_index = 0
+        new_slides_data = self.marp_engine.extract_slides(self.state.markdown_content)
+        if new_slides_data != self.state.slides_data:
+            self.state.slides_data = new_slides_data
+            self.state.slide_count = len(self.state.slides_data)
+            if self.state.slide_count > 0 and self.state.current_slide_index > self.state.slide_count:
+                self.state.current_slide_index = self.state.slide_count
+            elif self.state.slide_count == 0:
+                self.state.current_slide_index = 0
 
-        # Debounce preview update
         if self.state.is_live_preview_enabled:
             if self.preview_update_timer:
                 self.preview_update_timer.cancel()
-
             self.preview_update_timer = Timer(self.state.debounce_delay, self._schedule_preview_update)
             self.preview_update_timer.start()
-        elif self.preview_update_timer: # If live preview is off, cancel any existing timer
+        elif self.preview_update_timer:
             self.preview_update_timer.cancel()
 
         if self.view:
-            self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index)
+            # Update slide list with metadata first (no images yet)
+            self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index, [])
             self.view.update_status(self.state.status_message, len(new_content), new_content.count('\n') + 1)
         
     def toggle_live_preview(self, enabled: bool) -> None:
@@ -208,27 +212,27 @@ class AppController:
                     slide_index=self.state.current_slide_index - 1 if self.state.current_slide_index > 0 else None
                 )
                 if self.view and hasattr(self.view, 'presentation_html_frame') and self.view.presentation_html_frame:
-                    # Already in main thread due to _schedule_preview_update
                     self.view.presentation_html_frame.load_html(rendered_html)
             else:
-                image_data = self.marp_engine.render_slides_as_images(
+                image_data_list = self.marp_engine.render_slides_as_images(
                     self.state.markdown_content,
                     self.state.selected_theme,
                     self.state.aspect_ratio
                 )
+                self.last_rendered_slide_images = image_data_list
                 if self.view:
-                    # Already in main thread due to _schedule_preview_update
-                    self.view.update_previews_panel(image_data, self.state.aspect_ratio)
+                    self.view.update_previews_panel(self.last_rendered_slide_images, self.state.aspect_ratio)
+                    self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index, self.last_rendered_slide_images)
         else:
             self.state.html_content = ""
+            self.last_rendered_slide_images = []
             if self.view:
                 if self.state.is_presentation_mode:
                     if hasattr(self.view, 'presentation_html_frame') and self.view.presentation_html_frame:
-                        # Already in main thread due to _schedule_preview_update
                         self.view.presentation_html_frame.load_html("Live preview is disabled.")
                 else:
-                    # Already in main thread due to _schedule_preview_update
-                    self.view.update_previews_panel([], self.state.aspect_ratio)
+                    self.view.update_previews_panel(self.last_rendered_slide_images, self.state.aspect_ratio)
+                self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index, self.last_rendered_slide_images)
 
     def set_aspect_ratio(self, aspect_ratio: str) -> None:
         self.state.aspect_ratio = aspect_ratio
@@ -251,8 +255,8 @@ class AppController:
         if 1 <= slide_index <= self.state.slide_count:
             self.state.current_slide_index = slide_index
             self._schedule_preview_update(force=True)
-            if self.view:
-                self.view.after(0, lambda: self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index))
+            # if self.view:
+            #    self.view.after(0, lambda: self.view.update_slide_list(self.state.slides_data, self.state.current_slide_index, self.last_rendered_slide_images)) # This call will be made within update_preview
             return True
         return False
     
