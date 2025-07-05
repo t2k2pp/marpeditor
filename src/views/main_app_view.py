@@ -296,7 +296,7 @@ class SidePanel(ctk.CTkTabview):
 
         # Determine thumbnail width dynamically
         frame_width = self.slides_frame.winfo_width()
-        horizontal_padding = 20  # Total padding (left + right)
+        horizontal_padding = 10  # Total padding (left + right) - Reduced
         min_thumbnail_width = 80
         default_thumbnail_width = 220 # Approx 1.7x of 128
 
@@ -363,7 +363,7 @@ class SidePanel(ctk.CTkTabview):
                     if slide.index == current_slide_index:
                         image_widget.configure(fg_color=("#90CAF9", "#1E88E5")) # Example selected color (light blueish)
 
-                    image_widget.pack(padx=5, pady=5)
+                    image_widget.pack(padx=2, pady=2) # padx/pady Reduced
                     self.slide_buttons.append(image_widget)
 
                 except Exception as e:
